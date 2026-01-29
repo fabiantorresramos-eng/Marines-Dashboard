@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>USMC Communications – Proficiency Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Rajdhani:wght@400;600;700&family=Orbitron:wght@400;600;700&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#05070b">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="marineDashboard"></div>
+
+  <script src="./app.js"></script>
+  <script>
+    // Note: This dashboard does NOT persist Marine data.
+    // Use "Load CSV" each session to import your roster and rubric scores.
+    MarineDashboard.mount('#marineDashboard', {
+      homeUrl: 'https://fabiantorresramos-eng.github.io/Agony-app/'
+    });
+  </script>
+</body>
+</html>
