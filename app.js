@@ -25,9 +25,10 @@
     '0671-0679': 'Data (0671/0679)'
   };
 
-  // ---- Profile images (MOS / billet -> local artwork) ----
-  // Place image files under: ./assets/mos/
-  // (Included in the zip so GitHub Pages can load them.)
+  // =========================================================
+  // ✅ FIX: Profile images live in REPO ROOT (NOT assets/mos/)
+  // =========================================================
+  // Your repo shows files like: 0621.png, 0627.png, 1stsgt.png in the ROOT
   const MOS_IMAGE_MAP = {
     '0602': '0602.png',
     '0621': '0621.png',
@@ -43,23 +44,39 @@
 
     const billetRaw = (m?.billet ?? m?.Billet ?? m?.title ?? m?.Title ?? '').toString().trim();
     const billet = billetRaw.toLowerCase();
-    // Leadership artwork (optional): use billet when it exists.
-    if(billet.includes('company commander')) return './assets/mos/company_commander.png';
-    if(billet.includes('first sergeant') || billet.includes('1stsgt') || billet.includes('1st sgt')) return './assets/mos/1stsgt.png';
 
-    if(mos && MOS_IMAGE_MAP[mos]) return `./assets/mos/${MOS_IMAGE_MAP[mos]}`;
+    // Optional leadership art in ROOT (only if you upload it)
+    // You DO have 1stsgt.png in root based on your screenshot.
+    if (billet.includes('first sergeant') || billet.includes('1stsgt') || billet.includes('1st sgt')) {
+      return './1stsgt.png';
+    }
+    // If you later add this file to root, it will work automatically:
+    if (billet.includes('company commander')) {
+      return './company_commander.png';
+    }
+
+    if (mos && MOS_IMAGE_MAP[mos]) return `./${MOS_IMAGE_MAP[mos]}`;
     return null;
   }
 
-  // Avatar helper: supports MOS-based profile photos (assets) + safe fallback initials.
+  // Avatar helper: supports MOS-based profile photos + safe fallback initials.
   function setAvatar(el, marine, fallbackText){
     const url = getProfileImageUrl(marine);
+    const fallback = (fallbackText || '').trim();
+
     if(url){
       el.classList.add('has-img');
-      el.innerHTML = `<img src="${url}" alt="Profile" loading="lazy" />`;
+      el.innerHTML = `<img src="${url}" alt="Profile" loading="lazy">`;
+
+      // ✅ If image path is wrong / missing, fall back to initials instead of blank box.
+      const img = el.querySelector('img');
+      img.onerror = () => {
+        el.classList.remove('has-img');
+        el.textContent = fallback;
+      };
     } else {
       el.classList.remove('has-img');
-      el.textContent = fallbackText || '';
+      el.textContent = fallback;
     }
   }
 
@@ -85,8 +102,6 @@
     for(const m of roster){
       const plt = m.plt || 'HQ';
       const squad = m.squad || 'Unassigned';
-      // If a Marine belongs to a squad but has no team, keep them inside the squad
-      // and place them in a dedicated "No Team" bucket.
       const team = (m.team && String(m.team).trim()) ? m.team : (m.squad && String(m.squad).trim() ? 'No Team' : 'Unassigned');
       if(!root.has(plt)) root.set(plt, new Map());
       const sMap = root.get(plt);
@@ -116,9 +131,8 @@
     return sorted;
   }
 
-  // ---- Hierarchy view helpers (Option C: drill-down tiles) ----
+  // ---- Hierarchy view helpers ----
   function overallForMarine(m){
-    // Overall score basis: average of all 4 specialty rubrics (each rubric = avg of 5 areas)
     const rubrics = (m.rubrics||[]);
     if(!rubrics.length) return 0;
     const per = RUBRIC_KEYS.map(rid=>{
@@ -129,9 +143,8 @@
         return clamp(a?.score ?? 0, 0, 100);
       });
       return Math.round(avg(vals));
-    }).filter(v=>v!==null)
-    ;
-    // If none matched, fall back to first rubric
+    }).filter(v=>v!==null);
+
     if(!per.length){
       const r = rubrics[0];
       const vals = AREA_KEYS.map(k=>{
@@ -143,16 +156,14 @@
     return Math.round(avg(per));
   }
 
-
   function summarizeGroup(marines){
     const count = marines.length;
-    const scored = count; // CSV-driven roster usually has rubric columns for all; keep explicit field for UI
+    const scored = count;
     const overall = count ? Math.round(avg(marines.map(overallForMarine))) : 0;
     return { count, scored, overall };
   }
 
   function teamPanelData(ctx, members){
-    // ctx: {plt, squad, team}
     const count = members.length;
     const avgScore = count ? Math.round(avg(members.map(overallForMarine))) : 0;
 
@@ -184,7 +195,6 @@
 
   // ---- Radar SVG with clickable points ----
   function radarSVG(rubric, ctx){
-    // ctx: { marineId, rubricId, size }
     const size = ctx.size ?? 92;
     const pad = 10;
     const cx = size/2, cy = size/2;
@@ -207,7 +217,6 @@
 
     const poly = pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
 
-    // Grid rings
     const rings = [0.25,0.5,0.75,1].map((t)=>{
       const ringPts=[];
       for(let i=0;i<5;i++){
@@ -245,8 +254,6 @@
         <polygon points="${poly}" stroke="url(#${uid})" stroke-width="2" fill="none"/>
         ${pts.map(p=>{
           const attrs = `data-mid="${escapeXml(ctx.marineId)}" data-rid="${escapeXml(ctx.rubricId)}" data-ak="${escapeXml(p.key)}" data-score="${p.score}"`;
-          // Use an invisible larger "hit" circle so clicks are easy/reliable across browsers.
-          // Also mark the visible dot as a click target (some users click the dot, not the hit ring).
           return `
             <circle class="radar-hit radar-point" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="12" ${attrs} />
             <circle class="radar-dot radar-point" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5" ${attrs} />
@@ -257,7 +264,6 @@
   }
 
   function bigRadarSVG(rubric, ctx){
-    // Bigger viewBox with extra margin so labels don't get clipped.
     const size = 380;
     const pad = 44;
     const cx = size/2, cy = size/2;
@@ -303,7 +309,6 @@
     const labelEls = pts.map((p)=>{
       const dx = p.ax - cx;
       const dy = p.ay - cy;
-      // Push labels farther out for readability.
       const lx = cx + dx*1.18;
       const ly = cy + dy*1.18;
       const anchor = Math.abs(dx) < 8 ? 'middle' : (dx>0 ? 'start' : 'end');
@@ -311,7 +316,6 @@
       return `<text class="radar-label" x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${anchor}" dominant-baseline="middle" font-size="12" fill="rgba(246,243,243,.88)">${escapeXml(lab)}</text>`;
     }).join('');
 
-    // Extra viewBox margin is the safest way to avoid label clipping across browsers.
     const vbMargin = 84;
     return `
       <svg class="big-radar" viewBox="-${vbMargin} -${vbMargin} ${size+(vbMargin*2)} ${size+(vbMargin*2)}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Radar chart">
@@ -419,8 +423,9 @@
       Billet: m.billet,
       name: name || `${m.rank||''} ${m.lastName||''}`.trim()
     });
+
     const avatarInner = imgUrl
-      ? `<img src="${escapeXml(imgUrl)}" alt="Profile artwork" loading="lazy">`
+      ? `<img src="${escapeXml(imgUrl)}" alt="Profile artwork" loading="lazy" onerror="this.remove(); this.parentElement.classList.remove('has-img'); this.parentElement.textContent='${escapeXml(initials||'US')}'">`
       : escapeXml(initials || 'US');
 
     const status = String(m.status || '').toUpperCase();
@@ -474,7 +479,7 @@
     `;
   }
 
-  // ---- Hierarchy layout (Option C: drill-down tiles) ----
+  // ---- Hierarchy layout helpers ----
   function withinNav(m, nav){
     if(nav.plt && String(m.plt||'').trim() !== String(nav.plt).trim()) return false;
     if(nav.squad && String(m.squad||'').trim() !== String(nav.squad).trim()) return false;
@@ -508,9 +513,7 @@
     `;
   }
 
-
-
-  // ---- Org chart layout (PLT breakdown like the provided diagrams) ----
+  // ---- Org chart layout helpers ----
   function pltDisplayLabel(plt){
     const s = String(plt||'').trim();
     if(!s) return 'HQ';
@@ -545,11 +548,6 @@
     `;
   }
 
-  function firstMatch(list, rx){
-    const r = (rx instanceof RegExp) ? rx : new RegExp(String(rx), 'i');
-    return list.find(m=>r.test(String(m.billet||'')));
-  }
-
   function squadOrder(k){
     const s = String(k||'').toLowerCase();
     if(s.includes('1')) return 1;
@@ -565,21 +563,6 @@
     if(s.includes('no team')) return 98;
     if(s.includes('unassigned')) return 99;
     return 50;
-  }
-
-
-  function billetPriority(billet){
-    const b = String(billet||'').toLowerCase();
-    if(!b) return 50;
-    if(/team\s*leader/.test(b)) return 0;
-    if(/asst\.?\s*team\s*ldr|assistant\s*team\s*leader/.test(b)) return 5;
-    if(/asst\.?\s*sqd\s*ldr|assistant\s*squad\s*leader/.test(b)) return 6;
-    if(/squad\s*leader/.test(b)) return 8;
-    if(/gcss\s*rep|rep\\b/.test(b)) return 12;
-    if(/driver/.test(b)) return 14;
-    if(/help\s*desk/.test(b)) return 16;
-    if(/maintenance/.test(b)) return 18;
-    return 30;
   }
 
   function nameKey(m){
@@ -616,8 +599,6 @@
       return;
     }
 
-    // Placement is strictly based on: Section (PLT), Squad, Team columns.
-    // Marines with blank Squad appear under 'Platoon Staff'.
     const staff = marines.filter(m=> String(m.squad||'').trim().toLowerCase()==='platoon staff');
     const line = marines.filter(m=> !staff.some(s=>String(s.id)===String(m.id)) );
 
@@ -692,11 +673,11 @@
       </div>
     `;
   }
+
   function renderHierarchy(container, roster, nav, crumbsEl){
     const scoped = roster.filter(m=>withinNav(m, nav));
     if(crumbsEl) crumbsEl.innerHTML = crumbsHTML(nav);
 
-    // Level 1: PLT tiles
     if(!nav.plt){
       const by = new Map();
       for(const m of scoped){
@@ -726,61 +707,59 @@
       return { count: by.size, marines: scoped.length };
     }
 
-
-
-    // Level 2: PLT org chart (diagram view)
     const pltScoped = roster.filter(m=>String(m.plt||'HQ').trim()===String(nav.plt).trim());
     renderPltOrgChart(container, pltScoped, nav.plt);
     return { count: pltScoped.length, marines: pltScoped.length };
   }
+
   // ---- Modals ----
   function buildProfileModal(){
     const el = document.createElement('div');
     el.className = 'md-modal';
     el.innerHTML = `
       <div class="md-dialog hud-shell" role="dialog" aria-modal="true" aria-label="Marine profile">
-	        <header>
-	          <div class="left">
-	            <div class="title">
-	              <b id="mdName">Marine</b>
-	              <span id="mdSub">PLT · Squad · Team</span>
-	            </div>
-	          </div>
-	          <button class="btn" id="mdClose">Close</button>
-	        </header>
-	        <div class="md-body md-body-v2">
-	          <div class="panel hud-module md-left">
-	            <div class="profile-side">
-	              <div class="profile-photo" id="mdAvatar">US</div>
-	              <div class="profile-info">
-                  <div class="meta-chips" id="mdChips"></div>
-                  <div class="tabs profile-tabs" id="mdProfileTabs"></div>
-                  <div class="profile-tabcontent" id="mdProfileContent"></div>
+        <header>
+          <div class="left">
+            <div class="title">
+              <b id="mdName">Marine</b>
+              <span id="mdSub">PLT · Squad · Team</span>
+            </div>
+          </div>
+          <button class="btn" id="mdClose">Close</button>
+        </header>
+        <div class="md-body md-body-v2">
+          <div class="panel hud-module md-left">
+            <div class="profile-side">
+              <div class="profile-photo" id="mdAvatar">US</div>
+              <div class="profile-info">
+                <div class="meta-chips" id="mdChips"></div>
+                <div class="tabs profile-tabs" id="mdProfileTabs"></div>
+                <div class="profile-tabcontent" id="mdProfileContent"></div>
               </div>
-	            </div>
-	          </div>
-	
-	          <div class="panel hud-module md-right">
-	            <div class="module-header">
-	              <h5 class="hud-title">Rubric Radar</h5>
-	              <span class="hud-label">5 Core Areas</span>
-	            </div>
-	            <div id="mdRadar"></div>
-	            <div class="tabs tabs-under" id="mdTabs"></div>
-	            <div class="footnote">Tip: change the Specialty filter to see the radar update.</div>
-	          </div>
-	
-	          <div class="panel hud-module md-bottom">
-	            <div class="module-header">
-	              <h5 class="hud-title">Area Scores</h5>
-	              <span class="hud-label">Avg % by Area</span>
-	            </div>
-	            <div class="area-list" id="mdAreas"></div>
-	            <div class="footnote">
-	              Tip: click any radar point to open the expanded area detail.
-	            </div>
-	          </div>
-	        </div>
+            </div>
+          </div>
+
+          <div class="panel hud-module md-right">
+            <div class="module-header">
+              <h5 class="hud-title">Rubric Radar</h5>
+              <span class="hud-label">5 Core Areas</span>
+            </div>
+            <div id="mdRadar"></div>
+            <div class="tabs tabs-under" id="mdTabs"></div>
+            <div class="footnote">Tip: change the Specialty filter to see the radar update.</div>
+          </div>
+
+          <div class="panel hud-module md-bottom">
+            <div class="module-header">
+              <h5 class="hud-title">Area Scores</h5>
+              <span class="hud-label">Avg % by Area</span>
+            </div>
+            <div class="area-list" id="mdAreas"></div>
+            <div class="footnote">
+              Tip: click any radar point to open the expanded area detail.
+            </div>
+          </div>
+        </div>
       </div>
     `;
     document.body.appendChild(el);
@@ -796,7 +775,6 @@
         $('#mdName', el).textContent = name;
         $('#mdSub', el).textContent = `${marine.plt||'HQ'} · Squad ${marine.squad||'Unassigned'} · Team ${marine.team||'Unassigned'} · MOS ${marine.mos||'—'}`;
 
-        // Left panel: meta chips + tabbed details (Admin / Accounts / Operations / Training)
         const raw = marine.raw || {};
         const rf = (names)=>getField(raw, names);
 
@@ -915,13 +893,14 @@
           });
         }
 
+        // ✅ uses root path logic now
         setAvatarEl($('#mdAvatar', el), {
           name,
           mos: marine.mos,
           MOS: marine.mos,
           billet: marine.billet,
           Billet: marine.billet
-        });
+        }, `${(marine.firstName||'')[0]||''}${(marine.lastName||'')[0]||''}`.toUpperCase());
 
         const rubrics = (marine.rubrics || []).slice(0,4);
         const tabs = $('#mdTabs', el);
@@ -1000,13 +979,14 @@
       el,
       open: ({marine, rubricId, areaKey}, onOpenProfile)=>{
         const name = `${marine.rank||''} ${marine.firstName||''} ${marine.lastName||''}`.trim() || 'Marine';
+
         setAvatarEl($('#adAvatar', el), {
           name,
           MOS: marine.mos,
           mos: marine.mos,
           Billet: marine.billet,
           billet: marine.billet
-        });
+        }, `${(marine.firstName||'')[0]||''}${(marine.lastName||'')[0]||''}`.toUpperCase());
 
         const r = (marine.rubrics || []).find(x=>x.id===rubricId) || makeEmptyRubric(rubricId);
         const a = (r.areas || []).find(x=>x.key===areaKey) || {score:0, notes:''};
@@ -1031,7 +1011,6 @@
       }
     };
   }
-
 
   function buildTeamPanel(){
     const el = document.createElement('div');
@@ -1124,15 +1103,6 @@
   }
 
   // ---- Filters ----
-  function buildFilters(roster){
-    const uniq = (arr)=>[...new Set(arr.filter(Boolean).map(x=>String(x).trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-    return {
-      plts: uniq(roster.map(m=>m.plt||'HQ')),
-      squads: uniq(roster.map(m=>m.squad||'Unassigned')),
-      teams: uniq(roster.map(m=>m.team||'Unassigned'))
-    };
-  }
-
   function applyFilter(roster, state){
     const q = (state.q||'').trim().toLowerCase();
     return roster.filter(m=>{
@@ -1142,22 +1112,14 @@
     });
   }
 
-  // ---- CSV ingest ----
+  // ---- CSV ingest helpers ----
   function normalizeHeader(h){
-    // Robust header cleanup:
-    // - strip UTF-8 BOM (common from Excel)
-    // - convert non‑breaking spaces
-    // - trim + collapse whitespace
     return String(h||'')
       .replace(/[\uFEFF\u00A0]/g,' ')
       .trim()
       .replace(/\s+/g,' ');
   }
 
-  // Month parsing for title headers like:
-  //   "Jan 0621 Mission Planning and Preparation"
-  //   "February 0631 Operations and Employment"
-  // We use the month to pick the most recent column when multiple months exist.
   const MONTH_INDEX = {
     jan: 1, january: 1,
     feb: 2, february: 2,
@@ -1180,7 +1142,6 @@
 
   function parseTitleHeader(header){
     const raw = normalizeHeader(header);
-    // Month (word) + MOS (4 digits) + rest as area
     const m = raw.match(/^([A-Za-z]+)\s+(\d{4})\s+(.+)$/);
     if(!m) return null;
     return {
@@ -1193,7 +1154,6 @@
   }
 
   function parseCSV(text){
-    // Minimal RFC4180-ish parser
     const rows=[];
     let i=0, field='', row=[], inQuotes=false;
     while(i<text.length){
@@ -1207,7 +1167,6 @@
       if(c===','){ row.push(field); field=''; i++; continue; }
       if(c==='\n'){
         row.push(field); field='';
-        // handle CR
         if(row.length===1 && row[0]==='' ){ i++; row=[]; continue; }
         rows.push(row);
         row=[];
@@ -1240,31 +1199,21 @@
     return '';
   }
 
-  
-function toIntMaybe(v){
-  if(v === null || v === undefined) return null;
-  // Accept numbers, numeric strings, and percent strings like "50.00%"
-  const raw = String(v).trim();
-  if(!raw) return null;
-  const hadPct = raw.includes('%');
-  const cleaned = raw.replace(/%/g,'').replace(/,/g,'').trim();
-  const n = parseFloat(cleaned);
-  if(!Number.isFinite(n)) return null;
+  function toIntMaybe(v){
+    if(v === null || v === undefined) return null;
+    const raw = String(v).trim();
+    if(!raw) return null;
+    const hadPct = raw.includes('%');
+    const cleaned = raw.replace(/%/g,'').replace(/,/g,'').trim();
+    const n = parseFloat(cleaned);
+    if(!Number.isFinite(n)) return null;
 
-  // If value looks like a fraction (0-1) and not explicitly a percent, convert to 0-100
-  let out = n;
-  if(!hadPct && out >= 0 && out <= 1) out = out * 100;
+    let out = n;
+    if(!hadPct && out >= 0 && out <= 1) out = out * 100;
 
-  // Clamp to 0-100
-  if(out < 0) out = 0;
-  if(out > 100) out = 100;
-  return out;
-}
-
-function hashCode(str){
-    let h=0;
-    for(let i=0;i<str.length;i++) h = ((h<<5)-h) + str.charCodeAt(i) | 0;
-    return Math.abs(h);
+    if(out < 0) out = 0;
+    if(out > 100) out = 100;
+    return out;
   }
 
   function getAreaValueFromRow(row, rubricId, areaKey){
@@ -1282,19 +1231,12 @@ function hashCode(str){
       keys.push(`${base}_${areaKey}_PCT`);
     }
 
-    // Try exact/insensitive match
     for(const k of keys){
       const v = getField(row, [k]);
       const n = toIntMaybe(v);
       if(n !== null) return clamp(n, 0, 100);
     }
 
-    // Fallback 1: "Title" headers (common in staff exports)
-    // Example headers:
-    //   "Jan 0621 Mission Planning and Preparation"
-    //   "Jan 0631 Troubleshooting and Maintenance"
-    // We detect: header pattern "<Month> <MOS> <Area...>".
-    // If multiple months exist for the same MOS+Area, we pick the most recent month.
     const mosSet = (String(rubricId||'').match(/\d{3,4}/g) || []).map(m => String(m).padStart(4,'0'));
     const areaTitles = {
       planning: ['mission planning and preparation','planning and preparation'],
@@ -1306,8 +1248,7 @@ function hashCode(str){
     const want = (areaTitles[areaKey] || []).map(s=>String(s).toLowerCase());
 
     if(mosSet.length && want.length){
-      // Pass A: strict title parsing with month awareness
-      let best = null; // { monthIdx, score }
+      let best = null;
       for(const hk of Object.keys(row||{})){
         const parsed = parseTitleHeader(hk);
         if(!parsed) continue;
@@ -1330,7 +1271,6 @@ function hashCode(str){
       }
       if(best) return best.score;
 
-      // Pass B: loose matching (handles titles that don't start with a month)
       for(const hk of Object.keys(row||{})){
         const nh = normalizeHeader(hk)
           .toLowerCase()
@@ -1344,7 +1284,6 @@ function hashCode(str){
       }
     }
 
-    // Fallback 2: Lettered columns (BM..BQ) sometimes show up in exports
     const letterMap = { planning: 'BM', setup: 'BN', ops: 'BO', trouble: 'BP', security: 'BQ' };
     const lk = letterMap[areaKey];
     if(lk && lk in (row||{})){
@@ -1352,7 +1291,6 @@ function hashCode(str){
       if(n !== null) return clamp(n, 0, 100);
     }
 
-    // Final fallback: unknown / missing values -> 0
     return 0;
   }
 
@@ -1388,19 +1326,7 @@ function hashCode(str){
     };
   }
 
-  function normOrdinal(v){
-    const s = String(v||'').trim().toLowerCase();
-    if(!s) return '';
-    if(s in {'1':'1st','1st':'1st','first':'1st'}) return '1st';
-    if(s in {'2':'2nd','2nd':'2nd','second':'2nd'}) return '2nd';
-    if(s in {'3':'3rd','3rd':'3rd','third':'3rd'}) return '3rd';
-    if(s.includes('1')) return '1st';
-    if(s.includes('2')) return '2nd';
-    if(s.includes('3')) return '3rd';
-    return s;
-  }
-
-  function rowToMarine(row, idx = 0){
+  function rowToMarine(row){
     let rank = getField(row, ['Rank','rank']);
     let firstName = getField(row, ['First Name','first name','First','firstname']);
     let lastName = getField(row, ['Last Name','last name','Last','lastname']);
@@ -1412,45 +1338,22 @@ function hashCode(str){
       firstName = firstName || parsed.firstName;
       lastName = lastName || parsed.lastName;
     }
+
     const email = getField(row, ['Email','email']);
     const edipi = getField(row, ['EDIPI','edipi','DoD ID','DOD ID']);
-    const bic = getField(row, ['BIC','bic']);
-    const clearance = getField(row, ['Clearance','clearance']);
-    const unit = getField(row, ['UNIT','Unit','unit']);
+    const mos = normalizeMOS(getField(row, ['MOS','mos','Mos','MOS Code','MOS code']));
+    const billet = getField(row, ['Billet','billet']);
 
-    // Placement is driven ONLY by CSV columns: Section, Squad, Team
-    // (No billet-based inference or re-assignment.)
     const sectionRaw = getField(row, ['Section','section','SECTION','PLT','Plt','plt']);
     const plt = (sectionRaw || 'HQ').toString().trim() || 'HQ';
 
     const squadRaw = getField(row, ['Squad','squad']);
     const teamRaw  = getField(row, ['Team','team']);
 
-    // If Squad is blank, treat as Platoon Staff (still inside the PLT).
     const squad = (squadRaw && String(squadRaw).trim()) ? String(squadRaw).trim() : 'Platoon Staff';
-
-    // If Team is blank but Squad exists, put into a "No Team" bucket within that squad.
     const team = (teamRaw && String(teamRaw).trim()) ? String(teamRaw).trim() : (squad && squad !== 'Platoon Staff' ? 'No Team' : 'Platoon Staff');
 
-    const mos = normalizeMOS(getField(row, ['MOS','mos','Mos','MOS Code','MOS code']));
-    const billet = getField(row, ['Billet','billet']);
-	    const status = getField(row, ['Status','status','Marine Status','STATUS']);
-	    const statusStart = getField(row, ['Status Start','status start','StatusStart']);
-	    const statusEnd = getField(row, ['Status End Date','status end date','Status End','StatusEnd']);
-	    const currentOpStart = getField(row, ['Current Operation : Start Time','Current Operation  : Start Time','Current Operation Start Time','Current Op Start']);
-	    const currentOpEnd = getField(row, ['Current Operation : End Time','Current Operation  : End Time','Current Operation End Time','Current Op End']);
-	    const futureOperation = getField(row, ['Future Operation','future operation']);
-	    const futureOpStart = getField(row, ['Future Operation: Start Time','Future Operation : Start Time','Future Operation Start Time']);
-	    const futureOpEnd = getField(row, ['Future Operation: End Time','Future Operation : End Time','Future Operation End Time']);
-	    const operationRaw = getField(row, [
-	      'Current Operation','Current Operation  ','Operation','operation','Op','OP','Mission','mission',
-	      'Committed Operation','Committed to Operation',
-	      'Deployment','deployment','Exercise','exercise'
-	    ]);
-	    const committedRaw = getField(row, ['Op Committed','Committed','Committed?','Committed To Op','CommittedToOp','Committed to operation']);
-	    const operation = (operationRaw && String(operationRaw).trim()) ? String(operationRaw).trim() : '';
-	    const committed = isTruthy(committedRaw) || (!!operation && !/(not\s*committed|none|n\/?a)/i.test(operation));
-	    const operationLabel = operation ? operation : (committed ? 'Committed' : 'Not committed');
+    const status = getField(row, ['Status','status','Marine Status','STATUS']);
 
     const id = (edipi || email || `${lastName}_${firstName}_${mos}`).toString().trim();
 
@@ -1470,10 +1373,6 @@ function hashCode(str){
       firstName,
       lastName,
       email,
-      edipi,
-      bic,
-      clearance,
-      unit,
       section: plt,
       plt,
       squad,
@@ -1481,29 +1380,13 @@ function hashCode(str){
       mos,
       billet,
       status,
-      statusStart,
-      statusEnd,
-	      operation,
-      currentOpStart,
-      currentOpEnd,
-      futureOperation,
-      futureOpStart,
-      futureOpEnd,
-      rubrics
-      ,raw: row
+      rubrics,
+      raw: row
     };
   }
 
   function makeEmptyRubric(rid){
     return { id: rid, areas: AREA_KEYS.map(k=>({key:k, label: AREA_LABELS[k], score: 0})) };
-  }
-
-  async function loadRoster(url){
-    const res = await fetch(url, {cache:'no-store'});
-    if(!res.ok) throw new Error(`Failed to fetch roster: ${res.status}`);
-    const data = await res.json();
-    if(!Array.isArray(data)) throw new Error('Roster JSON must be an array');
-    return { roster: data, meta: {source:url} };
   }
 
   // ---- Main mount ----
@@ -1542,7 +1425,7 @@ function hashCode(str){
         <div class="md-content" id="mdGroups">
           <div class="panel" style="margin-top: 14px;">
             <h5>No roster loaded</h5>
-            <div class="footnote">Use <b>Load CSV</b> to import your roster. This dashboard does not store Marine data between sessions.</div>
+            <div class="footnote">Use <b>Load CSV</b> each session to import your roster and rubric scores.</div>
           </div>
         </div>
       </div>
@@ -1555,13 +1438,13 @@ function hashCode(str){
     let roster = [];
     try{
       if(rosterUrl){
-        const loaded = await loadRoster(rosterUrl);
-        roster = loaded.roster;
-      }else{
-        roster = [];
+        const res = await fetch(rosterUrl, {cache:'no-store'});
+        if(res.ok){
+          const data = await res.json();
+          roster = Array.isArray(data) ? data : [];
+        }
       }
-    } catch(err){
-      console.error(err);
+    }catch(_){
       roster = [];
     }
 
@@ -1569,7 +1452,7 @@ function hashCode(str){
       $('#mdGroups', root).innerHTML = `
         <div class="panel" style="margin-top: 14px;">
           <h5>No roster loaded yet</h5>
-          <div class="small">Use <b>Load CSV</b> to import your roster. The dashboard does <b>not</b> store Marine info in the browser.</div>
+          <div class="small">Use <b>Load CSV</b> to import your roster.</div>
         </div>
       `;
     }
@@ -1578,13 +1461,9 @@ function hashCode(str){
     const topBtn = $('#mdTop', root);
     const backBtn = $('#mdBack', root);
 
-    const state = {
-      q:'',
-      nav: { plt: null, squad: null, team: null }
-    };
+    const state = { q:'', nav: { plt: null, squad: null, team: null } };
 
     function wireInteractions(){
-      // Card click opens profile
       $$('.card', root).forEach(card=>{
         if(card.__md_hooked) return;
         card.__md_hooked = true;
@@ -1595,17 +1474,12 @@ function hashCode(str){
         });
       });
 
-      // Radar point click opens area modal.
-      // Use a *document-level* delegated handler so it works for:
-      // - cards (inside root)
-      // - the expanded profile modal (appended to body)
       if(!document.__md_radar_delegate){
         document.__md_radar_delegate = true;
         document.addEventListener('click', (e)=>{
           const target = (e.target && e.target.closest) ? e.target.closest('.radar-point') : e.target;
           if(!target || !target.classList || !target.classList.contains('radar-point')) return;
 
-          // Prevent card-clicks or other bubbling handlers.
           e.preventDefault();
           e.stopPropagation();
 
@@ -1620,7 +1494,7 @@ function hashCode(str){
             { marine: m, rubricId: rid, areaKey: ak },
             (marine, openRid)=>profileModal.open(marine, openRid)
           );
-        }, true); // capture phase wins vs other click handlers
+        }, true);
       }
     }
 
@@ -1628,18 +1502,14 @@ function hashCode(str){
       const filtered = applyFilter(roster, state);
       const view = renderHierarchy($('#mdGroups', root), filtered, state.nav, crumbsEl);
       $('#mdCount', root).textContent = String(view.count);
-      // Update back button state
       backBtn.disabled = !state.nav.plt;
       wireInteractions();
     }
 
-    // Initial render
     render();
 
-    // Search
     $('#mdSearch', root).addEventListener('input', (e)=>{ state.q = e.target.value; render(); });
 
-    // Tile drill-down + org-chart node clicks (event delegation)
     const viewRoot = $('#mdGroups', root);
     viewRoot.addEventListener('click', (e)=>{
       const tp = e.target.closest ? e.target.closest('.team-panel-trigger') : null;
@@ -1671,7 +1541,6 @@ function hashCode(str){
       }
     });
 
-    // Breadcrumb click navigation
     crumbsEl.addEventListener('click', (e)=>{
       const crumb = e.target.closest ? e.target.closest('.crumb') : null;
       if(!crumb) return;
@@ -1681,7 +1550,6 @@ function hashCode(str){
       render();
     });
 
-    // Top + Back buttons
     topBtn.addEventListener('click', ()=>{ state.nav = {plt:null,squad:null,team:null}; render(); });
     backBtn.addEventListener('click', ()=>{
       state.nav.plt = null;
@@ -1690,7 +1558,6 @@ function hashCode(str){
       render();
     });
 
-    // CSV upload
     const fileInput = $('#mdCsv', root);
     $('#mdLoadCsv', root).addEventListener('click', ()=> fileInput.click());
 
@@ -1699,15 +1566,13 @@ function hashCode(str){
       if(!file) return;
       const text = await file.text();
       const rows = parseCSV(text);
-      const newRoster = rows.map(rowToMarine);
-      roster = newRoster;
+      roster = rows.map(rowToMarine);
       state.q='';
       state.nav = {plt:null,squad:null,team:null};
       $('#mdSearch', root).value='';
       render();
     });
 
-    // Global ESC closes modals
     document.addEventListener('keydown', (e)=>{
       if(e.key==='Escape'){
         profileModal.el.classList.remove('show');
@@ -1718,44 +1583,44 @@ function hashCode(str){
 
   window.MarineDashboard = { mount };
 
-function normalizeMOS(value) {
-  if (value === null || value === undefined) return '';
-  let s = String(value).trim();
-  if (!s) return '';
-  s = s.replace(/,/g,'');
-  if (/^\d+(\.\d+)?$/.test(s)) {
-    const n = Math.floor(parseFloat(s));
-    if (Number.isFinite(n)) s = String(n);
-  }
-  s = s.replace(/\D/g,'');
-  if (!s) return '';
-  if (s.length < 4) s = s.padStart(4,'0');
-  return s;
-}
-
-const KNOWN_RANKS = [
-  'PVT','PFC','LCPL','CPL','SGT','SSGT','GYSGT','MSGT','1STSGT','SGTMAJ','MGYSGT',
-  'WO1','CWO2','CWO3','CWO4','CWO5',
-  '2NDLT','1STLT','CAPT','MAJ','LTCOL','COL','BGEN','MGEN','LTGEN','GEN'
-];
-
-function parseMarineName(full, fallbackRank='') {
-  const raw = (full || '').trim();
-  if (!raw) return { rank: fallbackRank || '', firstName: '', lastName: '' };
-  const parts = raw.replace(/\s+/g,' ').split(' ');
-  let rank = (fallbackRank || '').trim();
-  let startIdx = 0;
-
-  if (!rank) {
-    const cand1 = (parts[0] || '').toUpperCase().replace(/\./g,'');
-    if (KNOWN_RANKS.includes(cand1)) { rank = parts[0]; startIdx = 1; }
+  function normalizeMOS(value) {
+    if (value === null || value === undefined) return '';
+    let s = String(value).trim();
+    if (!s) return '';
+    s = s.replace(/,/g,'');
+    if (/^\d+(\.\d+)?$/.test(s)) {
+      const n = Math.floor(parseFloat(s));
+      if (Number.isFinite(n)) s = String(n);
+    }
+    s = s.replace(/\D/g,'');
+    if (!s) return '';
+    if (s.length < 4) s = s.padStart(4,'0');
+    return s;
   }
 
-  const nameParts = parts.slice(startIdx);
-  if (nameParts.length === 0) return { rank, firstName: '', lastName: '' };
-  if (nameParts.length === 1) return { rank, firstName: nameParts[0], lastName: '' };
-  const lastName = nameParts[nameParts.length - 1];
-  const firstName = nameParts.slice(0, -1).join(' ');
-  return { rank, firstName, lastName };
-}
+  const KNOWN_RANKS = [
+    'PVT','PFC','LCPL','CPL','SGT','SSGT','GYSGT','MSGT','1STSGT','SGTMAJ','MGYSGT',
+    'WO1','CWO2','CWO3','CWO4','CWO5',
+    '2NDLT','1STLT','CAPT','MAJ','LTCOL','COL','BGEN','MGEN','LTGEN','GEN'
+  ];
+
+  function parseMarineName(full, fallbackRank='') {
+    const raw = (full || '').trim();
+    if (!raw) return { rank: fallbackRank || '', firstName: '', lastName: '' };
+    const parts = raw.replace(/\s+/g,' ').split(' ');
+    let rank = (fallbackRank || '').trim();
+    let startIdx = 0;
+
+    if (!rank) {
+      const cand1 = (parts[0] || '').toUpperCase().replace(/\./g,'');
+      if (KNOWN_RANKS.includes(cand1)) { rank = parts[0]; startIdx = 1; }
+    }
+
+    const nameParts = parts.slice(startIdx);
+    if (nameParts.length === 0) return { rank, firstName: '', lastName: '' };
+    if (nameParts.length === 1) return { rank, firstName: nameParts[0], lastName: '' };
+    const lastName = nameParts[nameParts.length - 1];
+    const firstName = nameParts.slice(0, -1).join(' ');
+    return { rank, firstName, lastName };
+  }
 })();
